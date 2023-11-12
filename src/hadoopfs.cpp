@@ -149,8 +149,6 @@ namespace duckdb {
                 }
                 return false;
             }
-            //Printer::PrintF("Match: %s, %d -- %s, %d",
-            //                key->data(), key->length(), pattern->data(), pattern->length());
             if (!LikeFun::Glob(key->data(), key->length(), pattern->data(), pattern->length())) {
                 return false;
             }
@@ -165,7 +163,6 @@ namespace duckdb {
                                      FileOpener *opener) {
         string path_out, proto_host_port;
         HadoopFileSystem::ParseUrl(directory, path_out, proto_host_port);
-        //Printer::Print("ListFiles: " + directory);
         int num_entries;
         hdfsFileInfo *file_info = hdfsListDirectory(GetHadoopFileSystem(), path_out.c_str(), &num_entries);
         if (file_info == nullptr) {
@@ -173,7 +170,6 @@ namespace duckdb {
         }
 
         for (int i = 0; i < num_entries; ++i) {
-            //Printer::PrintF("File: %s, Kind: %d", file_info[i].mName, file_info[i].mKind);
             callback(JoinPath(proto_host_port, file_info[i].mName),
                      file_info[i].mKind == kObjectKindDirectory);
         }
@@ -209,9 +205,6 @@ namespace duckdb {
         string shared_path = glob_pattern.substr(0, first_slash_before_wildcard);
         string shared_pattern = glob_pattern.substr(first_slash_before_wildcard + 1);
 
-        //Printer::Print("Shared path: " + shared_path);
-        //Printer::Print("Shared pattern: " + shared_pattern);
-
         auto pattern_list = StringUtil::Split(shared_pattern, "/");
         vector<string> file_list;
         vector<string> path_list;
@@ -219,26 +212,19 @@ namespace duckdb {
         while (!path_list.empty()) {
             string current_path = path_list.back();
             path_list.pop_back();
-            //Printer::Print("Current path: " + current_path);
             ListFiles(current_path, [&](const string &fname, bool is_directory) {
                 auto match_path_list = StringUtil::Split(fname.substr(first_slash_before_wildcard + 1), "/");
                 if (is_directory && Match(FileType::FILE_TYPE_DIR,
                                           match_path_list.begin(), match_path_list.end(),
                                           pattern_list.begin(), pattern_list.begin() + match_path_list.size())) {
-                    //Printer::Print("Push dir: " + fname);
                     path_list.push_back(fname);
                 } else if (Match(FileType::FILE_TYPE_REGULAR,
                                  match_path_list.begin(), match_path_list.end(),
                                  pattern_list.begin(), pattern_list.end())) {
-                    //Printer::Print("Push file: " + fname);
                     file_list.push_back(fname);
                 }
             }, opener);
         }
-
-        //for(duckdb::idx_t idx  = 0; idx < file_list.size(); idx++){
-        //    Printer::PrintF("Glob %s: %s", glob_pattern, file_list[idx]);
-        //}
 
         return file_list;
     }
@@ -284,9 +270,6 @@ namespace duckdb {
         }
         hdfsBuilderConfSetStr(hdfs_builder, "dfs.client.read.shortcircuit", "false");
         auto fs = hdfsBuilderConnect(hdfs_builder);
-        //if (!hdfs) {
-        //    Printer::Print("Unable to connect to HDFS: " + hdfs_params.default_namenode);
-        //}
         return fs;
     }
 
@@ -370,19 +353,11 @@ namespace duckdb {
 
     void HadoopFileSystem::Read(FileHandle &handle, void *buffer, int64_t nr_bytes, idx_t location) {
         auto &hfh = (HadoopFileHandle &) handle;
-        //Printer::PrintF("nr_bytes-argument: %d", nr_bytes);
-        //Printer::PrintF("location-argument: %d", location);
-        //Printer::PrintF("location-before: %d", SeekPosition(handle));
         Seek(handle, location);
-        //Printer::PrintF("location-after: %d", SeekPosition(handle));
         auto read_byte_count = 0;
         while (read_byte_count < nr_bytes) {
             void *offset_buffer = static_cast<char *>(buffer) + read_byte_count;
             auto length = Read(handle, offset_buffer, nr_bytes - read_byte_count);
-            //Printer::PrintF("length: %d", length);
-            //for(int i = 0; i < length; i++){
-            //    Printer::PrintF("%X", *(static_cast<char *>(offset_buffer) + i));
-            //}
             if (length > 0) {
                 read_byte_count += length;
             } else {
@@ -402,7 +377,6 @@ namespace duckdb {
     }
 
     void HadoopFileSystem::Write(FileHandle &handle, void *buffer, int64_t nr_bytes, idx_t location) {
-        throw NotImplementedException("Writing to hdfs files not implemented");
         Seek(handle, location);
         auto write_byte_count = 0;
         while(write_byte_count < nr_bytes) {
@@ -418,7 +392,6 @@ namespace duckdb {
     }
 
     int64_t HadoopFileSystem::Write(FileHandle &handle, void *buffer, int64_t nr_bytes) {
-        throw NotImplementedException("Writing to hdfs files not implemented");
         auto &hfh = (HadoopFileHandle &) handle;
         if (!(hfh.flags & FileFlags::FILE_FLAGS_WRITE)) {
             throw InternalException("Write called on file not opened in write mode");
