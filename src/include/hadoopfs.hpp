@@ -8,7 +8,7 @@
 #include "duckdb/main/config.hpp"
 #include "duckdb/main/client_data.hpp"
 #include "duckdb/main/database.hpp"
-#include "hdfs.h"
+#include "../../third_party/libhdfs3/include/hdfs/hdfs.h"
 
 namespace duckdb {
 
@@ -29,11 +29,12 @@ namespace duckdb {
     };
 
     struct HDFSParams {
-        static constexpr const char  *HDFS_DEFAULT_NAMENODE = "hdfs_default_namenode";
+        static constexpr const char *HDFS_DEFAULT_NAMENODE = "hdfs_default_namenode";
 
         string default_namenode;
 
         static HDFSParams ReadFrom(DatabaseInstance &instance);
+
         static HDFSParams ReadFrom(FileOpener *opener, FileOpenerInfo &info);
     };
 
@@ -45,6 +46,7 @@ namespace duckdb {
         string keytab_file;
 
         static HDFSKerberosParams ReadFrom(DatabaseInstance &instance);
+
         static HDFSKerberosParams ReadFrom(FileOpener *opener, FileOpenerInfo &info);
     };
 
@@ -59,7 +61,7 @@ namespace duckdb {
         // This two-phase construction allows subclasses more flexible setup.
         virtual void Initialize(FileOpener *opener);
 
-        hdfsFS  hdfs = nullptr;
+        hdfsFS hdfs = nullptr;
         hdfsFile hdfs_file = nullptr;
         FileType file_type = FileType::FILE_TYPE_INVALID;
 
@@ -77,7 +79,18 @@ namespace duckdb {
     public:
         static void ParseUrl(const string &url, string &path_out, string &proto_host_port_out);
 
+        static bool Match(FileType file_type,
+                          vector<string>::const_iterator key, vector<string>::const_iterator key_end,
+                          vector<string>::const_iterator pattern, vector<string>::const_iterator pattern_end);
+
         explicit HadoopFileSystem(DatabaseInstance &db);
+
+        hdfsFS GetHadoopFileSystem();
+
+        hdfsFS GetHadoopFileSystemWithException();
+
+        hdfsFS GetHadoopFileSystem(const HDFSParams &hdfs_params,
+                                   const HDFSKerberosParams &hdfs_kerberos_params);
 
         duckdb::unique_ptr<FileHandle> OpenFile(const string &path, uint8_t flags, FileLockType lock = DEFAULT_LOCK,
                                                 FileCompressionType compression = DEFAULT_COMPRESSION,
@@ -152,9 +165,12 @@ namespace duckdb {
     protected:
         virtual duckdb::unique_ptr<HadoopFileHandle> CreateHandle(const string &path, uint8_t flags, FileLockType lock,
                                                                   FileCompressionType compression, FileOpener *opener);
+
     private:
         DatabaseInstance &instance;
-        hdfsFS hdfs;
+        hdfsFS _hdfs = nullptr;
+        HDFSParams hdfs_params;
+        HDFSKerberosParams hdfs_kerberos_params;
     };
 
 } // namespace duckdb

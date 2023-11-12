@@ -129,9 +129,9 @@ namespace duckdb {
         }
     }
 
-    static bool Match(FileType file_type,
-                      vector<string>::const_iterator key, vector<string>::const_iterator key_end,
-                      vector<string>::const_iterator pattern, vector<string>::const_iterator pattern_end) {
+    bool HadoopFileSystem::Match(FileType file_type,
+                                 vector<string>::const_iterator key, vector<string>::const_iterator key_end,
+                                 vector<string>::const_iterator pattern, vector<string>::const_iterator pattern_end) {
 
         while (key != key_end && pattern != pattern_end) {
             if (*pattern == "**") {
@@ -167,7 +167,7 @@ namespace duckdb {
         HadoopFileSystem::ParseUrl(directory, path_out, proto_host_port);
         //Printer::Print("ListFiles: " + directory);
         int num_entries;
-        hdfsFileInfo *file_info = hdfsListDirectory(hdfs, path_out.c_str(), &num_entries);
+        hdfsFileInfo *file_info = hdfsListDirectory(GetHadoopFileSystem(), path_out.c_str(), &num_entries);
         if (file_info == nullptr) {
             return false;
         }
@@ -244,32 +244,50 @@ namespace duckdb {
     }
 
     HadoopFileSystem::HadoopFileSystem(DatabaseInstance &instance) : instance(instance) {
-
-        auto hdfs_param = HDFSParams::ReadFrom(instance);
-        auto hdfs_kerberos_param = HDFSKerberosParams::ReadFrom(instance);
-
-        auto hdfs_builder = hdfsNewBuilder();
-        hdfsBuilderSetNameNode(hdfs_builder, hdfs_param.default_namenode.c_str());
-
-        if (!hdfs_kerberos_param.principal.empty()) {
-            hdfsBuilderSetUserName(hdfs_builder, hdfs_kerberos_param.principal.c_str());
-        }
-
-        if (!hdfs_kerberos_param.keytab_file.empty()) {
-            hdfsBuilderSetKerbTicketCachePath(hdfs_builder, hdfs_kerberos_param.keytab_file.c_str());
-        }
-
-        hdfs = hdfsBuilderConnect(hdfs_builder);
-        if (!hdfs) {
-            throw IOException("Unable to connect to HDFS: " + hdfs_param.default_namenode);
-        }
-
+        hdfs_params = HDFSParams::ReadFrom(instance);
+        hdfs_kerberos_params = HDFSKerberosParams::ReadFrom(instance);
     }
 
     HadoopFileSystem::~HadoopFileSystem() {
-        if (hdfs) {
-            hdfsDisconnect(hdfs);
+        if (_hdfs) {
+            hdfsDisconnect(_hdfs);
         }
+    }
+
+    hdfsFS HadoopFileSystem::GetHadoopFileSystem() {
+        if (!_hdfs) {
+            _hdfs = GetHadoopFileSystem(hdfs_params, hdfs_kerberos_params);
+        }
+        return _hdfs;
+    }
+
+    hdfsFS HadoopFileSystem::GetHadoopFileSystemWithException() {
+        auto hdfs = GetHadoopFileSystem();
+        if (!hdfs) {
+            throw IOException("Unable to connect to HDFS: " + hdfs_params.default_namenode);
+        }
+        return hdfs;
+    }
+
+    hdfsFS HadoopFileSystem::GetHadoopFileSystem(const HDFSParams &hdfs_params,
+                                                 const HDFSKerberosParams &hdfs_kerberos_params) {
+
+        auto hdfs_builder = hdfsNewBuilder();
+        hdfsBuilderSetNameNode(hdfs_builder, hdfs_params.default_namenode.c_str());
+
+        if (!hdfs_kerberos_params.principal.empty()) {
+            hdfsBuilderSetUserName(hdfs_builder, hdfs_kerberos_params.principal.c_str());
+        }
+
+        if (!hdfs_kerberos_params.keytab_file.empty()) {
+            hdfsBuilderSetKerbTicketCachePath(hdfs_builder, hdfs_kerberos_params.keytab_file.c_str());
+        }
+        hdfsBuilderConfSetStr(hdfs_builder, "dfs.client.read.shortcircuit", "false");
+        auto fs = hdfsBuilderConnect(hdfs_builder);
+        //if (!hdfs) {
+        //    Printer::Print("Unable to connect to HDFS: " + hdfs_params.default_namenode);
+        //}
+        return fs;
     }
 
     unique_ptr<HadoopFileHandle> HadoopFileSystem::CreateHandle(const string &path, uint8_t flags, FileLockType lock,
@@ -277,20 +295,12 @@ namespace duckdb {
         string path_out, proto_host_port;
         HadoopFileSystem::ParseUrl(path, path_out, proto_host_port);
         FileOpenerInfo info = {path};
+        HDFSParams hdfs_params = {proto_host_port.c_str()};
         auto hdfs_kerberos_params = HDFSKerberosParams::ReadFrom(opener, info);
 
-        hdfsBuilder *builder = hdfsNewBuilder();
-        hdfsBuilderSetNameNode(builder, proto_host_port.c_str());
-        if (!hdfs_kerberos_params.principal.empty()) {
-            hdfsBuilderSetUserName(builder, hdfs_kerberos_params.principal.c_str());
-        }
-        if (!hdfs_kerberos_params.keytab_file.empty()) {
-            hdfsBuilderSetKerbTicketCachePath(builder, hdfs_kerberos_params.keytab_file.c_str());
-        }
-        hdfsBuilderConfSetStr(builder, "dfs.client.read.shortcircuit", "false");
-        hdfsFS fs = hdfsBuilderConnect(builder);
+        hdfsFS fs = GetHadoopFileSystem(hdfs_params, hdfs_kerberos_params);
         if (!fs) {
-            throw IOException("Unable to connect to HDFS: " + path);
+            throw IOException("Unable to connect to HDFS: " + proto_host_port);
         }
 
         auto hadoop_file_handle =
@@ -394,7 +404,17 @@ namespace duckdb {
     void HadoopFileSystem::Write(FileHandle &handle, void *buffer, int64_t nr_bytes, idx_t location) {
         throw NotImplementedException("Writing to hdfs files not implemented");
         Seek(handle, location);
-        Write(handle, buffer, nr_bytes);
+        auto write_byte_count = 0;
+        while(write_byte_count < nr_bytes) {
+            void *offset_buffer = static_cast<char *>(buffer) + write_byte_count;
+            auto length = Write(handle, offset_buffer, nr_bytes - write_byte_count);
+            if (length >= 0) {
+                write_byte_count += length;
+            } else {
+                Printer::Print(hdfsGetLastError());
+                break;
+            }
+        }
     }
 
     int64_t HadoopFileSystem::Write(FileHandle &handle, void *buffer, int64_t nr_bytes) {
@@ -423,6 +443,7 @@ namespace duckdb {
 
     bool HadoopFileSystem::FileExists(const string &filename) {
         try {
+            auto hdfs = GetHadoopFileSystemWithException();
             if (hdfsExists(hdfs, filename.c_str()) == 0) {
                 return true;
             }
@@ -457,18 +478,22 @@ namespace duckdb {
     }
 
     void HadoopFileSystem::CreateDirectory(const string &directory) {
+        auto hdfs = GetHadoopFileSystemWithException();
         hdfsCreateDirectory(hdfs, directory.c_str());
     }
 
     void HadoopFileSystem::RemoveDirectory(const string &directory) {
+        auto hdfs = GetHadoopFileSystemWithException();
         hdfsDelete(hdfs, directory.c_str(), 1);
     }
 
     void HadoopFileSystem::MoveFile(const string &source, const string &target) {
+        auto hdfs = GetHadoopFileSystemWithException();
         hdfsRename(hdfs, source.c_str(), target.c_str());
     }
 
     void HadoopFileSystem::RemoveFile(const string &filename) {
+        auto hdfs = GetHadoopFileSystemWithException();
         hdfsDelete(hdfs, filename.c_str(), 1);
     }
 

@@ -35,20 +35,19 @@ endif ()
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
-project(${TARGET_NAME})
 list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 find_package(LIBHDFS3 REQUIRED)
-include_directories(${LIBHDFS3_INCLUDE_DIRS})
-include_directories(src/include)
+include_directories(src/include ${LIBHDFS3_INCLUDE_DIRS})
 set(EXTENSION_SOURCES src/hadoopfs.cpp src/hadoopfs_extension.cpp)
 
-# build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
-build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
+set(PARAMETERS "-warnings")
+build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
+build_loadable_extension(${TARGET_NAME} ${PARAMETERS} ${EXTENSION_SOURCES})
 
-target_link_libraries(hadoopfs_loadable_extension ${LIBHDFS3_LIBRARIES})
+target_link_libraries(${TARGET_NAME}_extension ${LIBHDFS3_LIBRARIES})
+target_link_libraries(${TARGET_NAME}_loadable_extension ${LIBHDFS3_LIBRARIES})
 
-install(
-        TARGETS ${EXTENSION_NAME}
+install(TARGETS ${TARGET_NAME}_extension ${TARGET_NAME}_loadable_extension
         EXPORT "${DUCKDB_EXPORT_SET}"
         LIBRARY DESTINATION "${INSTALL_LIB_DIR}"
         ARCHIVE DESTINATION "${INSTALL_LIB_DIR}")
