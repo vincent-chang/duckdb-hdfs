@@ -65,8 +65,13 @@ namespace duckdb
             {
                 domain_socket_path = value.ToString();
             }
-
-            return {namenode, "", ha_namenodes, shortcircuit, domain_socket_path};
+            HDFSParams result;
+            result.namenode = namenode;
+            result.url = "";
+            result.ha_namenodes = ha_namenodes;
+            result.shortcircuit = shortcircuit;
+            result.domain_socket_path = domain_socket_path;
+            return result;
         }
         // static HDFSParams ReadFrom(DatabaseInstance &instance);
         // static HDFSParams ReadFrom(FileOpener *opener, FileOpenerInfo &info);
