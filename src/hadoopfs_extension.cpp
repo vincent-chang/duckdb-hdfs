@@ -6,15 +6,16 @@
 
 namespace duckdb
 {
-    static void LoadInternal(DatabaseInstance &instance)
+    static void LoadInternal(ExtensionLoader &loader)
     {
+        DatabaseInstance &instance = loader.GetDatabaseInstance();
         auto &fs = instance.GetFileSystem();
         fs.RegisterSubSystem(duckdb::make_uniq<HadoopFileSystem>(instance));
     }
 
     void HadoopfsExtension::Load(ExtensionLoader &loader)
     {
-        LoadInternal(loader.GetDatabaseInstance());
+        LoadInternal(loader);
     }
 
     std::string HadoopfsExtension::Name()
@@ -24,20 +25,6 @@ namespace duckdb
 
 } // namespace duckdb
 
-extern "C"
-{
-
-    DUCKDB_EXTENSION_API void hadoopfs_init(duckdb::DatabaseInstance &db)
-    {
-        LoadInternal(db);
-    }
-
-    DUCKDB_EXTENSION_API const char *hadoopfs_version()
-    {
-        return duckdb::DuckDB::LibraryVersion();
-    }
+DUCKDB_CPP_EXTENSION_ENTRY(hadoopfs, loader) {
+    duckdb::LoadInternal(loader);
 }
-
-#ifndef DUCKDB_EXTENSION_MAIN
-#error DUCKDB_EXTENSION_MAIN not defined
-#endif
