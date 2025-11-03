@@ -12,9 +12,9 @@ namespace duckdb
         fs.RegisterSubSystem(duckdb::make_uniq<HadoopFileSystem>(instance));
     }
 
-    void HadoopfsExtension::Load(DuckDB &db)
+    void HadoopfsExtension::Load(ExtensionLoader &loader)
     {
-        LoadInternal(*db.instance);
+        LoadInternal(loader.GetDatabaseInstance());
     }
 
     std::string HadoopfsExtension::Name()

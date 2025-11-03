@@ -133,10 +133,8 @@ namespace duckdb
         hdfsFile hdfs_file = nullptr;
         FileType file_type = FileType::FILE_TYPE_INVALID;
 
-        // File handle info
-        FileOpenFlags flags;
         idx_t length;
-        time_t last_modified{};
+        timestamp_t last_modified{};
 
     public:
         void Close() override;
@@ -203,7 +201,7 @@ namespace duckdb
 
         int64_t GetFileSize(FileHandle &handle) override;
 
-        time_t GetLastModifiedTime(FileHandle &handle) override;
+        timestamp_t GetLastModifiedTime(FileHandle &handle) override;
 
         bool FileExists(const string &filename, optional_ptr<FileOpener> opener = nullptr) override;
 
