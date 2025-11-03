@@ -8,4 +8,5 @@ test/python/__pycache__/
 .Rhistory
 .vscode/
 third_party/
-
+.vscode
+.history

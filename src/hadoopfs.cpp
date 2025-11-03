@@ -5,8 +5,6 @@
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/function/scalar/string_common.hpp"
 #include "duckdb/main/database.hpp"
-#include "duckdb/main/extension_util.hpp"
-
 #include "hadoopfs_extension.hpp"
 
 #include <chrono>
@@ -69,13 +67,11 @@ namespace duckdb
         if (!localIPs.empty()) return localIPs;
         std::lock_guard<std::mutex> lock(local_ip_mutex);
         if (!localIPs.empty()) return localIPs;
-        //LOG(DEBUG) << "getLocalIPAddresses...";
         struct ifaddrs *ifaddr, *ifa;
         char ip[INET6_ADDRSTRLEN];
 
         if (getifaddrs(&ifaddr) == -1) 
         {
-            //perror("getifaddrs");
             return localIPs;
         }
 
@@ -207,7 +203,7 @@ namespace duckdb
     }
 
     HadoopFileHandle::HadoopFileHandle(FileSystem &fs, string path, FileOpenFlags flags, hdfsFS hdfs)
-        : FileHandle(fs, std::move(path), flags), hdfs(hdfs), flags(flags), length(0)
+        : FileHandle(fs, std::move(path), flags), hdfs(hdfs), length(0)
     {
     }
 
@@ -352,12 +348,10 @@ namespace duckdb
         }
 
         vector<OpenFileInfo> output;
-
         FileOpenerInfo info = {glob_pattern};
 
         // matches on prefix, not glob pattern, so we take a substring until the first wildcard char
         auto first_wildcard_pos = glob_pattern.find_first_of("*[\\");
-        // LOG(TRACE) << "first_wildcard_pos: " << first_wildcard_pos;
         if (first_wildcard_pos == string::npos)
         {
             output.emplace_back(glob_pattern);
@@ -365,7 +359,6 @@ namespace duckdb
         }
 
         auto first_slash_pos = glob_pattern.find('/', 7);
-        // LOG(TRACE) << "first_slash_pos: " << first_slash_pos;
         if (first_slash_pos == string::npos)
         {
             output.emplace_back(glob_pattern);
@@ -373,7 +366,6 @@ namespace duckdb
         }
 
         auto first_slash_before_wildcard = glob_pattern.rfind('/', first_wildcard_pos);
-        // LOG(TRACE) << "first_slash_before_wildcard: " << first_slash_before_wildcard;
         if (first_slash_before_wildcard == string::npos)
         {
             output.emplace_back(glob_pattern);
@@ -383,9 +375,6 @@ namespace duckdb
         string shared_path = glob_pattern.substr(0, first_slash_before_wildcard);
         string shared_pattern = glob_pattern.substr(first_slash_before_wildcard + 1);
 
-        // LOG(TRACE) << "shared_path: " << shared_path;
-        // LOG(TRACE) << "shared_pattern: " << shared_pattern;
-
         auto pattern_list = StringUtil::Split(shared_pattern, "/");
         vector<string> path_list;
         path_list.emplace_back(shared_path);
@@ -393,8 +382,6 @@ namespace duckdb
         {
             string current_path = path_list.back();
             path_list.pop_back();
-            // LOG(TRACE) << "current_path: " << current_path;
-            //  Printer::Print("Current path: " + current_path);
             ListFiles(
                 current_path,
                 [&](const string &fname, bool is_directory)
@@ -403,29 +390,22 @@ namespace duckdb
                     if (is_directory && Match(FileType::FILE_TYPE_DIR, match_path_list.begin(), match_path_list.end(),
                                               pattern_list.begin(), pattern_list.begin() + match_path_list.size()))
                     {
-                        // LOG(TRACE) << "Push dir: " << fname;
                         path_list.emplace_back(fname);
                     }
                     else if (Match(FileType::FILE_TYPE_REGULAR, match_path_list.begin(), match_path_list.end(),
                                    pattern_list.begin(), pattern_list.end()))
                     {
-                        output.emplace_back(fname);
-                    }
-                    else
-                    {
-                        // LOG(TRACE) << "Skip file: " << fname;
-                        //  throw IOException("Invalid file name: " + fname);
+                        output.emplace_back(OpenFileInfo(fname));
                     }
                 },
                 opener);
         }
         if (!output.empty())
         {
-            std::sort(output.begin(), output.end());
+            std::sort(output.begin(), output.end(), 
+                      [](const OpenFileInfo &a, const OpenFileInfo &b) { return a.path < b.path; });
         }
-
-        auto glob_end = std::chrono::high_resolution_clock::now();
-        auto glob_duration = std::chrono::duration_cast<std::chrono::microseconds>(glob_end - glob_start);
+        
         return output;
     }
 
@@ -616,7 +596,7 @@ namespace duckdb
                 hadoop_file_handle->file_type = FileType::FILE_TYPE_INVALID;
             }
             hadoop_file_handle->length = file_info->mSize;
-            hadoop_file_handle->last_modified = file_info->mLastMod;
+            hadoop_file_handle->last_modified = file_info->mLastMod * 1000; // convert to milliseconds
             hdfsFreeFileInfo(file_info, 1);
         }
 
@@ -733,7 +713,7 @@ namespace duckdb
         return sfh.length;
     }
 
-    time_t HadoopFileSystem::GetLastModifiedTime(FileHandle &handle)
+    timestamp_t HadoopFileSystem::GetLastModifiedTime(FileHandle &handle)
     {
         auto &hfh = (HadoopFileHandle &)handle;
         return hfh.last_modified;
