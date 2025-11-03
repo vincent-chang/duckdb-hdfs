@@ -407,9 +407,7 @@ namespace duckdb
             std::sort(output.begin(), output.end(), 
                       [](const OpenFileInfo &a, const OpenFileInfo &b) { return a.path < b.path; });
         }
-
-        auto glob_end = std::chrono::high_resolution_clock::now();
-        auto glob_duration = std::chrono::duration_cast<std::chrono::microseconds>(glob_end - glob_start);
+        
         return output;
     }
 
