@@ -25,6 +25,8 @@ namespace duckdb
 
 } // namespace duckdb
 
-DUCKDB_CPP_EXTENSION_ENTRY(hadoopfs, loader) {
-    duckdb::LoadInternal(loader);
+extern "C" {
+    DUCKDB_CPP_EXTENSION_ENTRY(hadoopfs, loader) {
+        duckdb::LoadInternal(loader);
+    }
 }

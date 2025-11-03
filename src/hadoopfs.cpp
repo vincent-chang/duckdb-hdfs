@@ -5,8 +5,6 @@
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/function/scalar/string_common.hpp"
 #include "duckdb/main/database.hpp"
-#include "duckdb/main/extension_util.hpp"
-
 #include "hadoopfs_extension.hpp"
 
 #include <chrono>
